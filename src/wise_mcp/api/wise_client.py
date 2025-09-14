@@ -3,7 +3,6 @@ Wise API client for interacting with the Wise API.
 """
 
 import os
-import uuid
 import requests
 from typing import Dict, List, Optional, Any
 
@@ -129,7 +128,7 @@ class WiseApiClient:
         source_currency: str, 
         target_currency: str, 
         source_amount: float,
-        recipient_id: str
+        recipient_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Create a quote for a currency exchange.
@@ -139,7 +138,7 @@ class WiseApiClient:
             source_currency: The source currency code (e.g., 'USD')
             target_currency: The target currency code (e.g., 'EUR')
             source_amount: The amount in the source currency to exchange
-            recipient_id: The recipient account ID
+            recipient_id: The recipient account ID (optional if used outside a send money flow)
             
         Returns:
             Quote object from the Wise API containing exchange rate details
@@ -154,7 +153,8 @@ class WiseApiClient:
             "sourceAmount": source_amount
         }
         
-        payload["targetAccount"] = recipient_id
+        if recipient_id:
+            payload["targetAccount"] = recipient_id
         
         response = requests.post(url, headers=self.headers, json=payload)
         
@@ -268,6 +268,89 @@ class WiseApiClient:
         return result
 
             
+    def get_account_requirements(self,
+                                 quote_id: str,
+                                 account_details: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """
+        Fetches recipient requirements for creating a new recipient or validates account details
+        against the requirements.
+        
+        Args:
+            quote_id: The ID of the quote to use for getting account requirements
+            account_details: Optional. The recipient account details to validate against requirements.
+                    If not provided, returns the initial account requirements.
+        
+        Returns:
+            Dictionary containing account requirements or validation results
+        
+        Raises:
+            Exception: If the API request fails
+        """
+        url = f"{self.base_url}/v1/quotes/{quote_id}/account-requirements"
+        
+        if account_details is None:
+            # GET request for initial requirements
+            response = requests.get(url, headers=self.headers)
+        else:
+            # POST request to validate account details
+            response = requests.post(url, headers=self.headers, json=account_details)
+        
+        if response.status_code >= 400:
+            self._handle_error(response)
+        
+        return response.json()
+    
+    def create_recipient(
+        self, 
+        profile_id: str, 
+        recipient_fullname: str, 
+        currency: str, 
+        recipient_type: str,
+        account_details: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Creates a new recipient with the provided account details.
+        
+        Args:
+            profile_id: The ID of the profile to create the recipient for (required)
+            currency: The currency code for the recipient account (required)
+            recipient_fullname: The name of the account holder (required)
+            recipient_type: The type of recipient account (required). It should be the top level `type` field of the recipient object from the requirements API
+            account_details: Additional recipient account details based on the requirements fetched earlier using the recipient requirements API.
+                          Example account details are:
+                          `"details": {"legalType": "PRIVATE","sortCode": "040075","accountNumber": "37778842","dateOfBirth": "1961-01-01"}`
+                          Field names in the `details` map are key names from the requirements API for `fields->group->key` json node.
+        
+        Returns:
+            The created recipient details
+        
+        Raises:
+            Exception: If the API request fails
+        """
+        # Create a recipient by calling the POST /v1/accounts endpoint
+        url = f"{self.base_url}/v1/accounts"
+        
+        # Initialize account_details if not provided
+        if account_details is None:
+            account_details = {}
+            
+        # Prepare the payload
+        payload = {
+            "profile": profile_id,
+            "accountHolderName": recipient_fullname,
+            "currency": currency,
+            "type": recipient_type,
+            "details": account_details,
+        }
+
+        # Send the request
+        response = requests.post(url, headers=self.headers, json=payload)
+        
+        if response.status_code >= 400:
+            self._handle_error(response)
+        
+        return response.json()
+        
     def get_ott_token_status(self, ott: str) -> Dict[str, Any]:
         """
         Get the status of a one-time token.

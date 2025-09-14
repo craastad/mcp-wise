@@ -101,6 +101,29 @@ Returns a list of all recipients from your Wise account.
 - `profile_type`: The type of profile to list recipients for. One of [personal, business]. Default: "personal"
 - `currency`: Optional. Filter recipients by currency code (e.g., 'EUR', 'USD')
 
+### `get_recipient_requirements`
+
+Fetches recipient requirements for creating a new recipient. If account details are provided, validates the account details against the requirements.
+
+**Parameters**:
+- `source_currency`: The source currency code (e.g., 'USD')
+- `target_currency`: The target currency code (e.g., 'EUR')
+- `source_amount`: The amount in the source currency
+- `profile_type`: The type of profile to use. One of [personal, business]. Default: "personal"
+- `account`: Optional. The recipient account details to validate against requirements. If not provided, returns the initial account requirements.
+
+### `create_recipient`
+
+Creates a new recipient with the provided account details.
+
+**Parameters**:
+- `profile_type`: The type of profile to use. One of [personal, business]. Default: "personal"
+- `account`: The recipient account details compliant with Wise API requirements. This should include:
+  - `accountHolderName`: Name of the account holder
+  - `currency`: Target currency code (e.g., 'EUR')
+  - `type`: Account type (e.g., 'iban', 'sort_code', etc.)
+  - `details`: Object containing account-specific details (varies by currency and country)
+
 ### `send_money`
 
 Sends money to a recipient using the Wise API.
