@@ -2,9 +2,53 @@
 Wise API transfer resources for the FastMCP server.
 """
 
+from typing import Optional
+
 from wise_mcp.app import mcp
-from wise_mcp.api.types import WiseTransfer
+from wise_mcp.api.types import WiseQuote, WiseTransfer
 from wise_mcp.api.wise_client import WiseApiClient
+from wise_mcp.api.wise_client_helper import init_wise_client
+
+
+@mcp.tool()
+def create_quote(
+    source_currency: str,
+    target_currency: str,
+    source_amount: float,
+    recipient_id: Optional[str] = None,
+    profile_type: str = "personal",
+) -> WiseQuote:
+    """
+    Creates a quote and returns the rate, fee and target amount for paying it from the balance.
+    Creating a quote moves no money, so use it to preview a payment before send_money, or as
+    the first step of the create_transfer / fund_transfer flow. Pass recipient_id to get the
+    exact fee for that recipient's account type.
+
+    Args:
+        source_currency: Source currency code (e.g., 'EUR')
+        target_currency: Target currency code (e.g., 'USD'); same as source for a same-currency transfer
+        source_amount: Amount in source currency to send
+        recipient_id: Optional. The ID of the recipient the quote is for
+        profile_type: The type of profile to use. One of [personal, business]. Default: "personal"
+
+    Returns:
+        The quote with id, amounts, rate, fee, estimated delivery and expiry
+
+    Raises:
+        Exception: If the API request fails
+    """
+
+    ctx = init_wise_client(profile_type)
+
+    quote = ctx.wise_api_client.create_quote(
+        profile_id=ctx.profile.profile_id,
+        source_currency=source_currency,
+        target_currency=target_currency,
+        source_amount=source_amount,
+        recipient_id=recipient_id,
+    )
+
+    return WiseQuote.from_api(quote)
 
 
 @mcp.tool()

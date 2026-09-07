@@ -7,6 +7,7 @@ A MCP (Machine Communication Protocol) server that serves as a gateway for the W
 - List all recipients from your Wise account via a simple MCP resource
 - Check the balances of a profile
 - Look up the status of a transfer
+- Preview the rate and fee of a payment with a quote
 - Automatically handles authentication and profile selection
 - Uses the Wise Sandbox API for development and testing
 - Available as a Docker image for easy integration
@@ -146,6 +147,20 @@ Sends money to a recipient using the Wise API.
 - `recipient_id`: The ID of the recipient to send money to
 - `payment_reference`: Optional. Reference message for the transfer (defaults to "money")
 - `source_of_funds`: Optional. Source of the funds (e.g., "salary", "savings")
+
+### `create_quote`
+
+Creates a quote and returns the rate, fee, target amount and expiry for
+paying it from the balance. No money moves, so this previews a payment
+before `send_money`, or starts the step-by-step
+`create_quote` → `create_transfer` → `fund_transfer` flow.
+
+**Parameters**:
+- `source_currency`: Source currency code (e.g., 'EUR')
+- `target_currency`: Target currency code; same as source for a same-currency transfer
+- `source_amount`: Amount in source currency to send
+- `recipient_id`: Optional. The ID of the recipient the quote is for (gives the exact fee)
+- `profile_type`: The type of profile to use. One of [personal, business]. Default: "personal"
 
 ### `get_transfer`
 
