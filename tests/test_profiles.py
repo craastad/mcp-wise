@@ -47,7 +47,7 @@ def test_profile_type_match_is_case_insensitive(mock_request, no_default_profile
     assert ctx.profile.profile_id == "200"
     args, _ = mock_request.call_args
     assert args[0] == "GET"
-    assert args[1].endswith("/v1/profiles")
+    assert args[1].endswith("/v2/profiles")
 
 
 def test_no_matching_type_lists_available_profiles(mock_request, no_default_profile):

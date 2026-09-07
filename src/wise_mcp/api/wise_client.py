@@ -75,15 +75,18 @@ class WiseApiClient:
     
     def list_profiles(self) -> List[Dict[str, Any]]:
         """
-        List all profiles associated with the API token.
-        
+        List every profile on the login behind the API token.
+
+        Uses /v2/profiles: the v1 endpoint omits business profiles beyond the
+        first one, so a login with several companies only saw one of them.
+
         Returns:
             List of profile objects from the Wise API.
-        
+
         Raises:
             Exception: If the API request fails.
         """
-        return self._get("/v1/profiles")
+        return self._get("/v2/profiles")
 
     def get_profile(self, profile_id: str) -> Dict[str, Any]:
         """
