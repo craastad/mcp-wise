@@ -17,13 +17,15 @@ def send_money(
     source_amount: float,
     recipient_id: str,
     payment_reference: Optional[str] = None,
-    source_of_funds: Optional[str] = None
+    source_of_funds: Optional[str] = None,
+    profile_id: Optional[str] = None,
 ) -> str:
     """
     Send money to a recipient using the Wise API.
 
     Args:
         profile_type: The type of profile to use (personal or business)
+        profile_id: Optional. The ID of the profile to use; wins over profile_type. WISE_PROFILE_ID sets the default
         source_currency: Source currency code (e.g., 'USD')
         source_amount: Amount in source currency to send
         recipient_id: The ID of the recipient to send money to
@@ -37,7 +39,7 @@ def send_money(
         Exception: If any API request fails during the process
     """
 
-    ctx = init_wise_client(profile_type)
+    ctx = init_wise_client(profile_type, profile_id)
     
     customer_transaction_id = str(uuid.uuid4())
     

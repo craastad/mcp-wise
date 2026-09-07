@@ -2,6 +2,7 @@
 Wise API client for interacting with the Wise API.
 """
 
+import logging
 import os
 import requests
 from typing import Dict, List, Optional, Any
@@ -18,6 +19,8 @@ from .types import (
 
 # Load environment variables from .env file
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 class WiseApiClient:
     """Client for interacting with the Wise API."""
@@ -56,14 +59,8 @@ class WiseApiClient:
         Raises:
             Exception: If the API request fails.
         """
-        url = f"{self.base_url}/v1/profiles"
-        response = requests.get(url, headers=self.headers)
-        
-        if response.status_code >= 400:
-            self._handle_error(response)
-            
-        return response.json()
-    
+        return self._get("/v1/profiles")
+
     def get_profile(self, profile_id: str) -> Dict[str, Any]:
         """
         Get a specific profile by ID.
@@ -319,7 +316,7 @@ class WiseApiClient:
         response = requests.post(url, headers=self.headers, json=payload)
         result = WiseFundWithScaResponse()
 
-        print(f"Funding transfer {transfer_id} response headers: {response.headers}")
+        logger.debug("Funding transfer %s response headers: %s", transfer_id, response.headers)
         
         if response.status_code == 403:
             if response.headers.get("x-2fa-approval-result") == "REJECTED":

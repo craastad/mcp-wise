@@ -19,6 +19,7 @@ def create_quote(
     source_amount: float,
     recipient_id: Optional[str] = None,
     profile_type: str = "personal",
+    profile_id: Optional[str] = None,
 ) -> WiseQuote:
     """
     Creates a quote and returns the rate, fee and target amount for paying it from the balance.
@@ -32,6 +33,7 @@ def create_quote(
         source_amount: Amount in source currency to send
         recipient_id: Optional. The ID of the recipient the quote is for
         profile_type: The type of profile to use. One of [personal, business]. Default: "personal"
+        profile_id: Optional. The ID of the profile to use; wins over profile_type. WISE_PROFILE_ID sets the default
 
     Returns:
         The quote with id, amounts, rate, fee, estimated delivery and expiry
@@ -40,7 +42,7 @@ def create_quote(
         Exception: If the API request fails
     """
 
-    ctx = init_wise_client(profile_type)
+    ctx = init_wise_client(profile_type, profile_id)
 
     quote = ctx.wise_api_client.create_quote(
         profile_id=ctx.profile.profile_id,
@@ -104,7 +106,7 @@ def describe_fund_result(transfer_id: str, fund_result: WiseFundWithScaResponse)
 
 
 @mcp.tool()
-def fund_transfer(transfer_id: str, profile_type: str = "personal") -> str:
+def fund_transfer(transfer_id: str, profile_type: str = "personal", profile_id: Optional[str] = None) -> str:
     """
     Pays a transfer created with create_transfer from the profile's balance. This moves money.
     May trigger a Strong Customer Authentication (SCA) challenge, in which case the returned
@@ -113,6 +115,7 @@ def fund_transfer(transfer_id: str, profile_type: str = "personal") -> str:
     Args:
         transfer_id: The ID of the transfer to fund
         profile_type: The type of profile that owns the transfer. One of [personal, business]
+        profile_id: Optional. The ID of the profile to use; wins over profile_type. WISE_PROFILE_ID sets the default
 
     Returns:
         String message with the transfer status or SCA challenge details
@@ -121,7 +124,7 @@ def fund_transfer(transfer_id: str, profile_type: str = "personal") -> str:
         Exception: If the API request fails or the balance is insufficient
     """
 
-    ctx = init_wise_client(profile_type)
+    ctx = init_wise_client(profile_type, profile_id)
 
     fund_result = ctx.wise_api_client.fund_transfer(
         profile_id=ctx.profile.profile_id,

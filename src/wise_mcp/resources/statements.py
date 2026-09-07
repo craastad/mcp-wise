@@ -24,6 +24,7 @@ def list_balance_transactions(
     interval_end: Optional[str] = None,
     transaction_type: Optional[str] = None,
     sender_name: Optional[str] = None,
+    profile_id: Optional[str] = None,
 ) -> List[WiseTransaction]:
     """
     Returns the transactions of a balance in a time window, newest first, for reconciling
@@ -33,6 +34,7 @@ def list_balance_transactions(
     Args:
         currency: Currency code of the balance to read (e.g., 'EUR')
         profile_type: The type of profile that holds the balance. One of [personal, business]
+        profile_id: Optional. The ID of the profile to use; wins over profile_type. WISE_PROFILE_ID sets the default
         days: Number of days to look back when interval_start is not given. Default: 30
         interval_start: Optional. Start of the window as an ISO 8601 timestamp (e.g., '2026-01-01T00:00:00Z')
         interval_end: Optional. End of the window as an ISO 8601 timestamp. Default: now
@@ -49,11 +51,11 @@ def list_balance_transactions(
     if transaction_type and transaction_type.upper() not in ("CREDIT", "DEBIT"):
         raise ToolError("transaction_type must be 'CREDIT' or 'DEBIT'")
 
-    ctx = init_wise_client(profile_type)
+    ctx = init_wise_client(profile_type, profile_id)
 
     balances = ctx.wise_api_client.list_balances(ctx.profile.profile_id, currency)
     if not balances:
-        raise ToolError(f"No {currency.upper()} balance found for the {profile_type} profile")
+        raise ToolError(f"No {currency.upper()} balance found for profile {ctx.profile.profile_id}")
 
     end = _parse_timestamp(interval_end) if interval_end else datetime.now(timezone.utc)
     start = _parse_timestamp(interval_start) if interval_start else end - timedelta(days=days)
