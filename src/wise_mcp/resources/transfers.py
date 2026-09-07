@@ -2,6 +2,7 @@
 Wise API transfer resources for the FastMCP server.
 """
 
+import uuid
 from typing import Optional
 
 from wise_mcp.app import mcp
@@ -49,6 +50,42 @@ def create_quote(
     )
 
     return WiseQuote.from_api(quote)
+
+
+@mcp.tool()
+def create_transfer(
+    recipient_id: str,
+    quote_id: str,
+    payment_reference: str,
+    source_of_funds: Optional[str] = None,
+) -> WiseTransfer:
+    """
+    Creates a transfer from a quote. The transfer is not paid until fund_transfer is called,
+    so this is the point to review the amounts and reference before any money moves.
+    Prefer send_money when no review step is needed.
+
+    Args:
+        recipient_id: The ID of the recipient to send money to
+        quote_id: The ID of a quote from create_quote for this recipient and amount
+        payment_reference: Reference message shown to the recipient
+        source_of_funds: Optional. Source of the funds (e.g., "salary", "savings")
+
+    Returns:
+        The created transfer, with status 'incoming_payment_waiting' until it is funded
+
+    Raises:
+        Exception: If the API request fails or the quote has expired
+    """
+
+    transfer = WiseApiClient().create_transfer(
+        recipient_id=recipient_id,
+        quote_uuid=quote_id,
+        reference=payment_reference,
+        customer_transaction_id=str(uuid.uuid4()),
+        source_of_funds=source_of_funds,
+    )
+
+    return WiseTransfer.from_api(transfer)
 
 
 @mcp.tool()

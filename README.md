@@ -8,6 +8,7 @@ A MCP (Machine Communication Protocol) server that serves as a gateway for the W
 - Check the balances of a profile
 - Look up the status of a transfer
 - Preview the rate and fee of a payment with a quote
+- Send money step by step (quote, transfer, fund) with a review point before paying
 - Automatically handles authentication and profile selection
 - Uses the Wise Sandbox API for development and testing
 - Available as a Docker image for easy integration
@@ -161,6 +162,18 @@ before `send_money`, or starts the step-by-step
 - `source_amount`: Amount in source currency to send
 - `recipient_id`: Optional. The ID of the recipient the quote is for (gives the exact fee)
 - `profile_type`: The type of profile to use. One of [personal, business]. Default: "personal"
+
+### `create_transfer`
+
+Creates a transfer from a quote without paying it, so the amounts and
+reference can be reviewed before `fund_transfer` moves the money. Use
+`send_money` when no review step is needed.
+
+**Parameters**:
+- `recipient_id`: The ID of the recipient to send money to
+- `quote_id`: The ID of a quote from `create_quote` for this recipient and amount
+- `payment_reference`: Reference message shown to the recipient
+- `source_of_funds`: Optional. Source of the funds (e.g., "salary", "savings")
 
 ### `get_transfer`
 
