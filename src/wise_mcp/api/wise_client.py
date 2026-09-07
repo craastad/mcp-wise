@@ -22,6 +22,15 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
+# File formats a balance statement can be downloaded in, with the Accept header to send.
+STATEMENT_FORMATS = {
+    "pdf": "application/pdf",
+    "csv": "text/csv",
+    "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "json": "application/json",
+}
+STATEMENT_TYPES = {"COMPACT", "FLAT"}
+
 class WiseApiClient:
     """Client for interacting with the Wise API."""
 
@@ -183,14 +192,73 @@ class WiseApiClient:
             Exception: If the API request fails.
         """
         return self._get(
-            f"/v1/profiles/{profile_id}/balance-statements/{balance_id}/statement.json",
-            params={
-                "currency": currency,
-                "intervalStart": interval_start,
-                "intervalEnd": interval_end,
-                "type": statement_type,
-            },
+            self._statement_path(profile_id, balance_id, "json"),
+            params=self._statement_params(currency, interval_start, interval_end, statement_type),
         )
+
+    def download_balance_statement(
+        self,
+        profile_id: str,
+        balance_id: str,
+        currency: str,
+        interval_start: str,
+        interval_end: str,
+        fmt: str = "pdf",
+        statement_type: str = "COMPACT",
+        locale: Optional[str] = None,
+    ) -> bytes:
+        """
+        Download the statement of a balance for a time window as a file.
+
+        Args:
+            profile_id: The ID of the profile that holds the balance.
+            balance_id: The ID of the balance, from list_balances.
+            currency: Currency code of the balance.
+            interval_start: Window start, formatted as "YYYY-MM-DDTHH:MM:SS.000Z".
+            interval_end: Window end, formatted the same way.
+            fmt: File format, one of "pdf", "csv", "xlsx" or "json".
+            statement_type: "COMPACT" (one line per transaction) or "FLAT" (fees as separate lines).
+            locale: Optional statement locale, e.g. "en" or "de".
+
+        Returns:
+            The file contents.
+
+        Raises:
+            ValueError: If fmt or statement_type is not one of the accepted values.
+            Exception: If the API request fails.
+        """
+        fmt = fmt.lower()
+        if fmt not in STATEMENT_FORMATS:
+            raise ValueError(f"fmt must be one of {sorted(STATEMENT_FORMATS)}, got '{fmt}'")
+
+        params = self._statement_params(currency, interval_start, interval_end, statement_type)
+        if locale:
+            params["statementLocale"] = locale
+
+        headers = {"Authorization": self.headers["Authorization"], "Accept": STATEMENT_FORMATS[fmt]}
+        return self._request(
+            "GET", self._statement_path(profile_id, balance_id, fmt), params=params, headers=headers
+        ).content
+
+    @staticmethod
+    def _statement_path(profile_id: str, balance_id: str, fmt: str) -> str:
+        """Build the balance-statement path for a file format."""
+        return f"/v1/profiles/{profile_id}/balance-statements/{balance_id}/statement.{fmt}"
+
+    @staticmethod
+    def _statement_params(
+        currency: str, interval_start: str, interval_end: str, statement_type: str
+    ) -> Dict[str, Any]:
+        """Build the query parameters of a statement request, validating the statement type."""
+        statement_type = statement_type.upper()
+        if statement_type not in STATEMENT_TYPES:
+            raise ValueError(f"statement_type must be one of {sorted(STATEMENT_TYPES)}, got '{statement_type}'")
+        return {
+            "currency": currency,
+            "intervalStart": interval_start,
+            "intervalEnd": interval_end,
+            "type": statement_type,
+        }
 
     def create_quote(
         self, 
@@ -486,6 +554,7 @@ class WiseApiClient:
         path: str,
         params: Optional[Dict[str, Any]] = None,
         json: Optional[Dict[str, Any]] = None,
+        headers: Optional[Dict[str, str]] = None,
     ) -> requests.Response:
         """
         Send a request to the Wise API and raise on any 4xx/5xx response.
@@ -495,6 +564,7 @@ class WiseApiClient:
             path: Path relative to the API base URL, e.g. "/v1/transfers/123".
             params: Optional query parameters.
             json: Optional JSON request body.
+            headers: Optional headers replacing the default JSON headers.
 
         Returns:
             The successful response object.
@@ -503,7 +573,7 @@ class WiseApiClient:
             Exception: If the API request fails.
         """
         response = requests.request(
-            method, f"{self.base_url}{path}", headers=self.headers, params=params, json=json
+            method, f"{self.base_url}{path}", headers=headers or self.headers, params=params, json=json
         )
 
         if response.status_code >= 400:
