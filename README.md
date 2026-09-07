@@ -175,6 +175,16 @@ reference can be reviewed before `fund_transfer` moves the money. Use
 - `payment_reference`: Reference message shown to the recipient
 - `source_of_funds`: Optional. Source of the funds (e.g., "salary", "savings")
 
+### `fund_transfer`
+
+Pays a transfer created with `create_transfer` from the profile's balance.
+This moves money and may trigger an SCA challenge, in which case the
+returned message contains the one-time token to approve.
+
+**Parameters**:
+- `transfer_id`: The ID of the transfer to fund
+- `profile_type`: The type of profile that owns the transfer. One of [personal, business]. Default: "personal"
+
 ### `get_transfer`
 
 Returns the current status and amounts of a transfer, for following a payment

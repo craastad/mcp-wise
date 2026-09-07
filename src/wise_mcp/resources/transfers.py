@@ -6,7 +6,7 @@ import uuid
 from typing import Optional
 
 from wise_mcp.app import mcp
-from wise_mcp.api.types import WiseQuote, WiseTransfer
+from wise_mcp.api.types import WiseFundWithScaResponse, WiseQuote, WiseTransfer
 from wise_mcp.api.wise_client import WiseApiClient
 from wise_mcp.api.wise_client_helper import init_wise_client
 
@@ -86,6 +86,49 @@ def create_transfer(
     )
 
     return WiseTransfer.from_api(transfer)
+
+
+def describe_fund_result(transfer_id: str, fund_result: WiseFundWithScaResponse) -> str:
+    """Turn a funding response into the status message returned to the client."""
+    if fund_result.sca_response:
+        return (f"Transfer {transfer_id} requires SCA. Please enter the PIN for the following "
+                f"OTT {fund_result.sca_response.one_time_token}")
+
+    fund_response = fund_result.fund_response
+    if fund_response and fund_response.status == "COMPLETED":
+        return f"Transfer {transfer_id} successfully sent"
+
+    error_message = fund_response.error_code if fund_response else "unknown error"
+    return f"Transfer {transfer_id} failed due to {error_message}"
+
+
+@mcp.tool()
+def fund_transfer(transfer_id: str, profile_type: str = "personal") -> str:
+    """
+    Pays a transfer created with create_transfer from the profile's balance. This moves money.
+    May trigger a Strong Customer Authentication (SCA) challenge, in which case the returned
+    message contains the one-time token to approve.
+
+    Args:
+        transfer_id: The ID of the transfer to fund
+        profile_type: The type of profile that owns the transfer. One of [personal, business]
+
+    Returns:
+        String message with the transfer status or SCA challenge details
+
+    Raises:
+        Exception: If the API request fails or the balance is insufficient
+    """
+
+    ctx = init_wise_client(profile_type)
+
+    fund_result = ctx.wise_api_client.fund_transfer(
+        profile_id=ctx.profile.profile_id,
+        transfer_id=transfer_id,
+        type="BALANCE",
+    )
+
+    return describe_fund_result(transfer_id, fund_result)
 
 
 @mcp.tool()
