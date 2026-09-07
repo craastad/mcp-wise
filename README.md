@@ -5,6 +5,7 @@ A MCP (Machine Communication Protocol) server that serves as a gateway for the W
 ## Features
 
 - List all recipients from your Wise account via a simple MCP resource
+- Check the balances of a profile
 - Automatically handles authentication and profile selection
 - Uses the Wise Sandbox API for development and testing
 - Available as a Docker image for easy integration
@@ -101,6 +102,15 @@ Returns a list of all recipients from your Wise account.
 - `profile_type`: The type of profile to list recipients for. One of [personal, business]. Default: "personal"
 - `currency`: Optional. Filter recipients by currency code (e.g., 'EUR', 'USD')
 
+### `get_balances`
+
+Returns the balances held by a profile, one entry per currency, with the
+available and reserved amounts.
+
+**Parameters**:
+- `profile_type`: The type of profile to list balances for. One of [personal, business]. Default: "personal"
+- `currency`: Optional. Only return the balance for this currency code (e.g., 'EUR')
+
 ### `get_recipient_requirements`
 
 Fetches recipient requirements for creating a new recipient. If account details are provided, validates the account details against the requirements.
@@ -160,6 +170,7 @@ wise-mcp/
         ├── api/        # API clients
         │   └── wise_client.py # Wise API client
         ├── resources/  # MCP resources
+        │   ├── balances.py    # Balances resource
         │   └── recipients.py  # Recipients resource
         └── app.py      # MCP application setup
 ```

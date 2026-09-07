@@ -7,7 +7,7 @@ import requests
 from typing import Dict, List, Optional, Any
 
 from dotenv import load_dotenv
-from .types import WiseRecipient, WiseFundResponse, WiseScaResponse, WiseFundWithScaResponse
+from .types import WiseBalance, WiseRecipient, WiseFundResponse, WiseScaResponse, WiseFundWithScaResponse
 
 # Load environment variables from .env file
 load_dotenv()
@@ -122,6 +122,36 @@ class WiseApiClient:
             
         return recipients
     
+    def list_balances(self, profile_id: str, currency: Optional[str] = None) -> List[WiseBalance]:
+        """
+        List the standard (non-savings) balances of a profile.
+
+        Args:
+            profile_id: The ID of the profile whose balances to list.
+            currency: Optional. Only return the balance for this currency code.
+
+        Returns:
+            List of WiseBalance objects.
+
+        Raises:
+            Exception: If the API request fails.
+        """
+        balances = self._get(f"/v4/profiles/{profile_id}/balances", params={"types": "STANDARD"})
+
+        result = []
+        for balance in balances:
+            if currency and balance.get("currency") != currency.upper():
+                continue
+            result.append(WiseBalance(
+                id=str(balance.get("id", "")),
+                currency=balance.get("currency", ""),
+                amount=float(balance.get("amount", {}).get("value", 0)),
+                reserved_amount=float(balance.get("reservedAmount", {}).get("value", 0)),
+                name=balance.get("name"),
+            ))
+
+        return result
+
     def create_quote(
         self, 
         profile_id: str, 
