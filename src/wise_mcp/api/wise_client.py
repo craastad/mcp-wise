@@ -2,11 +2,13 @@
 Wise API client for interacting with the Wise API.
 """
 
+import logging
 import os
 import requests
 from typing import Dict, List, Optional, Any
 
 from dotenv import load_dotenv
+from .sca import private_key_passphrase_from_env, private_key_path_from_env, sign_one_time_token
 from .types import (
     WiseBalance,
     WiseRecipient,
@@ -19,6 +21,39 @@ from .types import (
 # Load environment variables from .env file
 load_dotenv()
 
+logger = logging.getLogger(__name__)
+
+# Calendar version of the Wise Platform API that every request path is prefixed with.
+WISE_API_VERSION = "2026Q3"
+
+# File formats a balance statement can be downloaded in, with the Accept header to send.
+STATEMENT_FORMATS = {
+    "pdf": "application/pdf",
+    "csv": "text/csv",
+    "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "json": "application/json",
+}
+STATEMENT_TYPES = {"COMPACT", "FLAT"}
+
+
+class WiseSCARequiredError(Exception):
+    """Raised when a request needs Strong Customer Authentication and no signing key is configured."""
+
+    def __init__(self, one_time_token: str):
+        self.one_time_token = one_time_token
+        super().__init__(
+            "This request needs Strong Customer Authentication (SCA), which is done by signing a "
+            "one-time token with an RSA key. Generate a key pair (openssl genrsa -out private.pem 2048; "
+            "openssl rsa -pubout -in private.pem -out public.pem), upload public.pem under "
+            "Wise -> Your account -> API tokens -> Manage public keys, and set WISE_PRIVATE_KEY_PATH "
+            "to private.pem (and WISE_PRIVATE_KEY_PASSPHRASE if the key is encrypted)."
+        )
+
+def _path(resource: str) -> str:
+    """Return the request path of a resource under the configured API version."""
+    return f"/{WISE_API_VERSION}/{resource.lstrip('/')}"
+
+
 class WiseApiClient:
     """Client for interacting with the Wise API."""
 
@@ -30,16 +65,16 @@ class WiseApiClient:
             api_token: The API token to use for authentication.
         """
 
-        is_sandbox = os.getenv("WISE_IS_SANDBOX", "true").lower() == "true"
+        is_sandbox = os.getenv("WISE_IS_SANDBOX", "false").lower() == "true"
         self.api_token = os.getenv("WISE_API_TOKEN", "")
 
         if not self.api_token:
             raise ValueError("WISE_API_TOKEN must be provided or set in the environment")
         
         if is_sandbox:
-            self.base_url = "https://api.sandbox.transferwise.tech"
+            self.base_url = "https://api.wise-sandbox.com"
         else:
-            self.base_url = "https://api.transferwise.com"
+            self.base_url = "https://api.wise.com"
 
         self.headers = {
             "Authorization": f"Bearer {self.api_token}",
@@ -48,22 +83,17 @@ class WiseApiClient:
     
     def list_profiles(self) -> List[Dict[str, Any]]:
         """
-        List all profiles associated with the API token.
-        
+        List every profile on the login behind the API token, personal and
+        every business.
+
         Returns:
             List of profile objects from the Wise API.
-        
+
         Raises:
             Exception: If the API request fails.
         """
-        url = f"{self.base_url}/v1/profiles"
-        response = requests.get(url, headers=self.headers)
-        
-        if response.status_code >= 400:
-            self._handle_error(response)
-            
-        return response.json()
-    
+        return self._get(_path("profiles"))
+
     def get_profile(self, profile_id: str) -> Dict[str, Any]:
         """
         Get a specific profile by ID.
@@ -77,7 +107,7 @@ class WiseApiClient:
         Raises:
             Exception: If the API request fails.
         """
-        url = f"{self.base_url}/v1/profiles/{profile_id}"
+        url = f"{self.base_url}{_path(f'profiles/{profile_id}')}"
         response = requests.get(url, headers=self.headers)
         
         if response.status_code >= 400:
@@ -101,8 +131,8 @@ class WiseApiClient:
         Raises:
             Exception: If the API request fails.
         """
-        url = f"{self.base_url}/v2/accounts"
-        params = {"profile": profile_id}
+        url = f"{self.base_url}{_path('accounts')}"
+        params = {"profileId": profile_id}
         
         # Add currency filter if provided
         if currency:
@@ -118,9 +148,10 @@ class WiseApiClient:
         # Convert the raw recipient data to WiseRecipient objects
         recipients = []
         for recipient in response_data.get("content", []):
+            profile = recipient.get("profileId") or recipient.get("profile") or ""
             recipients.append(WiseRecipient(
                 id=str(recipient.get("id", "")),
-                profile_id=str(recipient.get("profile", "")),
+                profile_id=str(profile),
                 full_name=recipient.get("name", {}).get("fullName", "Unknown"),
                 currency=recipient.get("currency", ""),
                 country=recipient.get("country", ""),
@@ -143,7 +174,7 @@ class WiseApiClient:
         Raises:
             Exception: If the API request fails.
         """
-        balances = self._get(f"/v4/profiles/{profile_id}/balances", params={"types": "STANDARD"})
+        balances = self._get(_path(f"profiles/{profile_id}/balances"), params={"types": "STANDARD"})
 
         result = []
         for balance in balances:
@@ -186,14 +217,77 @@ class WiseApiClient:
             Exception: If the API request fails.
         """
         return self._get(
-            f"/v1/profiles/{profile_id}/balance-statements/{balance_id}/statement.json",
-            params={
-                "currency": currency,
-                "intervalStart": interval_start,
-                "intervalEnd": interval_end,
-                "type": statement_type,
-            },
+            self._statement_path(profile_id, balance_id, "json"),
+            params=self._statement_params(currency, interval_start, interval_end, statement_type),
         )
+
+    def download_balance_statement(
+        self,
+        profile_id: str,
+        balance_id: str,
+        currency: str,
+        interval_start: str,
+        interval_end: str,
+        fmt: str = "pdf",
+        statement_type: str = "COMPACT",
+        locale: Optional[str] = None,
+    ) -> bytes:
+        """
+        Download the statement of a balance for a time window as a file.
+
+        Args:
+            profile_id: The ID of the profile that holds the balance.
+            balance_id: The ID of the balance, from list_balances.
+            currency: Currency code of the balance.
+            interval_start: Window start, formatted as "YYYY-MM-DDTHH:MM:SS.000Z".
+            interval_end: Window end, formatted the same way.
+            fmt: File format, one of "pdf", "csv", "xlsx" or "json".
+            statement_type: "COMPACT" (one line per transaction) or "FLAT" (fees as separate lines).
+            locale: Optional statement locale, e.g. "en" or "de".
+
+        Returns:
+            The file contents.
+
+        Raises:
+            ValueError: If fmt or statement_type is not one of the accepted values.
+            Exception: If the API request fails.
+        """
+        fmt = fmt.lower()
+        if fmt not in STATEMENT_FORMATS:
+            raise ValueError(f"fmt must be one of {sorted(STATEMENT_FORMATS)}, got '{fmt}'")
+
+        params = self._statement_params(currency, interval_start, interval_end, statement_type)
+        if locale:
+            params["statementLocale"] = locale
+
+        headers = {"Authorization": self.headers["Authorization"], "Accept": STATEMENT_FORMATS[fmt]}
+        return self._request(
+            "GET", self._statement_path(profile_id, balance_id, fmt), params=params, headers=headers
+        ).content
+
+    @staticmethod
+    def _statement_path(profile_id: str, balance_id: str, fmt: str) -> str:
+        """Build the balance-statement path for a file format."""
+        resource = f"profiles/{profile_id}/balance-statements/{balance_id}/statement.{fmt}"
+        if fmt == "json":
+            return _path(resource)
+        # The current API only serves statement.json; the pdf, csv and xlsx files stay on legacy v1.
+        return f"/v1/{resource}"
+
+    @staticmethod
+    def _statement_params(
+        currency: str, interval_start: str, interval_end: str, statement_type: str
+    ) -> Dict[str, Any]:
+        """Build the query parameters of a statement request, validating the statement type."""
+        statement_type = statement_type.upper()
+        if statement_type not in STATEMENT_TYPES:
+            raise ValueError(f"statement_type must be one of {sorted(STATEMENT_TYPES)}, got '{statement_type}'")
+        return {
+            "currency": currency,
+            "intervalStart": interval_start,
+            "intervalEnd": interval_end,
+            "type": statement_type,
+        }
 
     def create_quote(
         self, 
@@ -219,7 +313,7 @@ class WiseApiClient:
         Raises:
             Exception: If the API request fails
         """
-        url = f"{self.base_url}/v3/profiles/{profile_id}/quotes"
+        url = f"{self.base_url}{_path(f'profiles/{profile_id}/quotes')}"
         payload = {
             "sourceCurrency": source_currency,
             "targetCurrency": target_currency,
@@ -260,7 +354,7 @@ class WiseApiClient:
         Raises:
             Exception: If the API request fails
         """
-        url = f"{self.base_url}/v1/transfers"
+        url = f"{self.base_url}{_path('transfers')}"
         
         # Create the details object with required reference
         details = {"reference": reference}
@@ -311,7 +405,7 @@ class WiseApiClient:
         if type != "BALANCE":
             raise ValueError("Only 'BALANCE' payment type is supported for funding transfers.")
 
-        url = f"{self.base_url}/v3/profiles/{profile_id}/transfers/{transfer_id}/payments"
+        url = f"{self.base_url}{_path(f'profiles/{profile_id}/transfers/{transfer_id}/payments')}"
         
         # Build the payment payload
         payload = {"type": type}
@@ -319,7 +413,7 @@ class WiseApiClient:
         response = requests.post(url, headers=self.headers, json=payload)
         result = WiseFundWithScaResponse()
 
-        print(f"Funding transfer {transfer_id} response headers: {response.headers}")
+        logger.debug("Funding transfer %s response headers: %s", transfer_id, response.headers)
         
         if response.status_code == 403:
             if response.headers.get("x-2fa-approval-result") == "REJECTED":
@@ -354,7 +448,7 @@ class WiseApiClient:
         Raises:
             Exception: If the API request fails.
         """
-        return WiseTransfer.from_api(self._get(f"/v1/transfers/{transfer_id}"))
+        return WiseTransfer.from_api(self._get(_path(f"transfers/{transfer_id}")))
 
     def download_transfer_receipt(self, transfer_id: str) -> bytes:
         """
@@ -372,7 +466,7 @@ class WiseApiClient:
         Raises:
             Exception: If the API request fails or the receipt is not available yet.
         """
-        return self._request("GET", f"/v1/transfers/{transfer_id}/receipt.pdf").content
+        return self._request("GET", _path(f"transfers/{transfer_id}/receipt.pdf")).content
 
     def get_account_requirements(self,
                                  quote_id: str,
@@ -392,7 +486,7 @@ class WiseApiClient:
         Raises:
             Exception: If the API request fails
         """
-        url = f"{self.base_url}/v1/quotes/{quote_id}/account-requirements"
+        url = f"{self.base_url}{_path(f'quotes/{quote_id}/account-requirements')}"
         
         if account_details is None:
             # GET request for initial requirements
@@ -433,8 +527,7 @@ class WiseApiClient:
         Raises:
             Exception: If the API request fails
         """
-        # Create a recipient by calling the POST /v1/accounts endpoint
-        url = f"{self.base_url}/v1/accounts"
+        url = f"{self.base_url}{_path('accounts')}"
         
         # Initialize account_details if not provided
         if account_details is None:
@@ -470,7 +563,7 @@ class WiseApiClient:
         Raises:
             Exception: If the API request fails
         """
-        url = f"{self.base_url}/v1/one-time-token/status"
+        url = f"{self.base_url}{_path('one-time-token/status')}"
         
         # Create custom headers with the one-time token
         headers = self.headers.copy()
@@ -489,15 +582,17 @@ class WiseApiClient:
         path: str,
         params: Optional[Dict[str, Any]] = None,
         json: Optional[Dict[str, Any]] = None,
+        headers: Optional[Dict[str, str]] = None,
     ) -> requests.Response:
         """
         Send a request to the Wise API and raise on any 4xx/5xx response.
 
         Args:
             method: HTTP method, e.g. "GET" or "POST".
-            path: Path relative to the API base URL, e.g. "/v1/transfers/123".
+            path: Path relative to the API base URL, usually built with _path().
             params: Optional query parameters.
             json: Optional JSON request body.
+            headers: Optional headers replacing the default JSON headers.
 
         Returns:
             The successful response object.
@@ -505,14 +600,46 @@ class WiseApiClient:
         Raises:
             Exception: If the API request fails.
         """
+        headers = headers or self.headers
         response = requests.request(
-            method, f"{self.base_url}{path}", headers=self.headers, params=params, json=json
+            method, f"{self.base_url}{path}", headers=headers, params=params, json=json
         )
+
+        one_time_token = self._sca_token(response)
+        if one_time_token:
+            response = requests.request(
+                method,
+                f"{self.base_url}{path}",
+                headers={**headers, **self._sca_headers(one_time_token)},
+                params=params,
+                json=json,
+            )
 
         if response.status_code >= 400:
             self._handle_error(response)
 
         return response
+
+    @staticmethod
+    def _sca_token(response: requests.Response) -> Optional[str]:
+        """Return the one-time token of a 403 SCA challenge, or None for any other response."""
+        if response.status_code != 403:
+            return None
+        return response.headers.get("x-2fa-approval") or None
+
+    @staticmethod
+    def _sca_headers(one_time_token: str) -> Dict[str, str]:
+        """
+        Build the headers that answer an SCA challenge by signing the token with the configured key.
+
+        Raises:
+            WiseSCARequiredError: If WISE_PRIVATE_KEY_PATH is not set.
+        """
+        key_path = private_key_path_from_env()
+        if not key_path:
+            raise WiseSCARequiredError(one_time_token)
+        signature = sign_one_time_token(one_time_token, key_path, private_key_passphrase_from_env())
+        return {"x-2fa-approval": one_time_token, "X-Signature": signature}
 
     def _get(self, path: str, params: Optional[Dict[str, Any]] = None) -> Any:
         """GET a JSON resource from the Wise API."""

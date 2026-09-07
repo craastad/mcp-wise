@@ -53,7 +53,7 @@ class WiseTransfer:
             target_currency=data.get("targetCurrency", ""),
             target_value=data.get("targetValue"),
             rate=data.get("rate"),
-            reference=details.get("reference"),
+            reference=details.get("reference") or data.get("reference"),
             recipient_id=str(target_account) if target_account is not None else None,
             created=data.get("created"),
             customer_transaction_id=data.get("customerTransactionId"),

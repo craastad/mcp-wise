@@ -3,17 +3,23 @@
 import pytest
 
 from tests.conftest import make_response
+from wise_mcp.api.wise_client import WISE_API_VERSION, _path
+
+
+def test_path_prefixes_the_api_version():
+    assert _path("profiles/1/balances") == f"/{WISE_API_VERSION}/profiles/1/balances"
+    assert _path("/profiles") == f"/{WISE_API_VERSION}/profiles"
 
 
 def test_get_sends_bearer_token_and_returns_json(client, mock_request):
     mock_request.return_value = make_response(200, {"ok": True})
 
-    result = client._get("/v1/example", params={"a": 1})
+    result = client._get("/2026Q3/example", params={"a": 1})
 
     assert result == {"ok": True}
     mock_request.assert_called_once_with(
         "GET",
-        "https://api.transferwise.com/v1/example",
+        "https://api.wise.com/2026Q3/example",
         headers=client.headers,
         params={"a": 1},
         json=None,
@@ -24,7 +30,7 @@ def test_get_sends_bearer_token_and_returns_json(client, mock_request):
 def test_post_sends_json_body(client, mock_request):
     mock_request.return_value = make_response(200, {"id": 7})
 
-    result = client._post("/v1/example", json={"x": "y"})
+    result = client._post("/2026Q3/example", json={"x": "y"})
 
     assert result == {"id": 7}
     _, kwargs = mock_request.call_args
@@ -37,4 +43,4 @@ def test_error_status_raises_with_api_details(client, mock_request):
     )
 
     with pytest.raises(Exception, match="NOT_VALID"):
-        client._get("/v1/example")
+        client._get("/2026Q3/example")

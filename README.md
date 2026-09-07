@@ -11,8 +11,9 @@ A MCP (Machine Communication Protocol) server that serves as a gateway for the W
 - Send money step by step (quote, transfer, fund) with a review point before paying
 - Read balance statements to reconcile incoming and outgoing payments
 - Download the PDF receipt of a completed transfer
-- Automatically handles authentication and profile selection
-- Uses the Wise Sandbox API for development and testing
+- Download balance statements as PDF, CSV, XLSX or JSON
+- Works with several profiles on one login and answers Strong Customer Authentication challenges
+- Can use the Wise Sandbox API for development and testing
 - Available as a Docker image for easy integration
 
 ## Requirements
@@ -71,7 +72,7 @@ And add to Claude Code by adding it to your `.mcp.json`
         "--rm",
         "--init",
         "-e", "WISE_API_TOKEN=your_api_token_here",
-        "-e", "WISE_IS_SANDBOX=true",
+        "-e", "WISE_IS_SANDBOX=false",
         "mcp-wise:latest"
       ]
     }
@@ -97,7 +98,16 @@ These template files contain the appropriate configuration for each mode.
 
 ## Available MCP Resources
 
-The server provides the following MCP resources:
+The server provides the following MCP resources. Every tool that takes
+`profile_type` also takes an optional `profile_id`, which wins over
+`profile_type`; `WISE_PROFILE_ID` sets the default for both (see
+[Multiple profiles](#multiple-profiles)).
+
+### `list_profiles`
+
+Returns every profile the API token can see, with `profile_id`, `type`
+(`PERSONAL` or `BUSINESS`), `name` and `is_default` (whether
+`WISE_PROFILE_ID` points to it). Takes no parameters.
 
 ### `list_recipients`
 
@@ -222,15 +232,80 @@ When the server runs in Docker, the path is inside the container.
 - `transfer_id`: The ID of the transfer
 - `output_path`: File path to write the PDF to; parent directories are created as needed
 
+### `download_balance_statement`
+
+Saves the statement of a balance as a file on the machine running the
+server, for bookkeeping. Give either a `month` or an explicit
+`interval_start`/`interval_end`; the window may not exceed 469 days.
+Some accounts need Strong Customer Authentication for statements (see
+[Statements and Strong Customer Authentication](#statements-and-strong-customer-authentication)).
+
+**Parameters**:
+- `currency`: Currency code of the balance (e.g., 'USD')
+- `output_path`: File path to write to; parent directories are created as needed
+- `month`: Optional. Calendar month as `YYYY-MM`, covering its first to last day in UTC
+- `interval_start`: Start of the window as `YYYY-MM-DD` or an ISO 8601 timestamp; required without `month`
+- `interval_end`: End of the window as `YYYY-MM-DD` (inclusive) or an ISO 8601 timestamp; required without `month`
+- `format`: One of `pdf`, `csv`, `xlsx`, `json`. Default: `pdf`
+- `statement_type`: `COMPACT` (one line per transaction) or `FLAT` (fees as separate lines). Default: `COMPACT`
+- `profile_type`: The type of profile that holds the balance. One of [personal, business]. Default: "personal"
+- `profile_id`: Optional. The ID of the profile to use; wins over `profile_type`
+
 ## Configuration
 
 Configuration is done via environment variables, which can be set in the `.env` file:
 
 - `WISE_API_TOKEN`: Your Wise API token (required)
-- `WISE_IS_SANDBOX`: Set to true to use the Wise Sandbox API (default: false)
+- `WISE_IS_SANDBOX`: Set to true to use the Wise Sandbox API at `api.wise-sandbox.com` instead of `api.wise.com` (default: false)
+- `WISE_PROFILE_ID`: Default profile id for every tool; run `list_profiles` to find it (optional)
+- `WISE_PRIVATE_KEY_PATH`: Path to the RSA private key used to answer Strong Customer Authentication challenges (optional)
+- `WISE_PRIVATE_KEY_PASSPHRASE`: Passphrase of that key, if it is encrypted (optional)
 - `MODE`: MCP Server transport mode, either "http" or "stdio" (default: stdio)
 
+### Multiple profiles
+
+One API token sees every profile on the login: the personal profile and
+each business. Tools pick a profile in this order: the `profile_id`
+argument, then `WISE_PROFILE_ID`, then the first profile whose type
+matches `profile_type`. To work with a specific business, run
+`list_profiles`, put its id in `WISE_PROFILE_ID`, and pass `profile_id`
+on a call whenever you need a different profile.
+
+### Statements and Strong Customer Authentication
+
+Wise protects balance statements with Strong Customer Authentication
+(SCA) on most accounts: the API answers 403 with a one-time token, and
+the request must be repeated with that token signed by an RSA key whose
+public half is registered on the account. The server does this
+automatically once a key is configured:
+
+```bash
+openssl genrsa -out private.pem 2048
+openssl rsa -pubout -in private.pem -out public.pem
+```
+
+Upload `public.pem` under Wise → Your account → API tokens → Manage
+public keys, then set `WISE_PRIVATE_KEY_PATH` to `private.pem` (and
+`WISE_PRIVATE_KEY_PASSPHRASE` if the key is encrypted). Profiles
+registered in the US, Canada, Australia, New Zealand, Singapore or
+Malaysia usually do not need this; if a statement call fails with an
+SCA error, set the key up as above.
+
+## Releases
+
+Releases are tagged `vX.Y.Z`, matching the `version` in `pyproject.toml`;
+[CHANGELOG.md](CHANGELOG.md) lists what each one changed.
+
 ## Development
+
+### Wise API version
+
+Wise versions its API by calendar quarter. Every request path is
+prefixed with `WISE_API_VERSION` from `src/wise_mcp/api/wise_client.py`
+(currently `2026Q3`), so moving to a newer quarter is a one-line change
+there. The pdf, csv and xlsx balance statements are the exception: the
+versioned API only serves `statement.json`, so those files are still
+fetched from the legacy `/v1` path.
 
 ### Project Structure
 
@@ -241,16 +316,18 @@ wise-mcp/
 ├── pyproject.toml      # Project dependencies and configuration
 ├── README.md           # This file
 └── src/                # Source code
-    ├── main.py         # Entry point
     └── wise_mcp/       # Main package
         ├── api/        # API clients
+        │   ├── sca.py         # Signing of SCA one-time tokens
         │   └── wise_client.py # Wise API client
         ├── resources/  # MCP resources
         │   ├── balances.py    # Balances resource
+        │   ├── profiles.py    # Profiles resource
         │   ├── recipients.py  # Recipients resource
-        │   ├── statements.py  # Balance statements resource
+        │   ├── statements.py  # Balance statements resources
         │   └── transfers.py   # Transfers resource
-        └── app.py      # MCP application setup
+        ├── app.py      # MCP application setup
+        └── main.py     # Entry point
 ```
 
 ### Running the tests
