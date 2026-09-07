@@ -32,9 +32,21 @@ class WiseProfileSummary:
 
 
 def profile_display_name(data: Dict[str, Any]) -> str:
-    """Return the businessName or fullName of a raw profile, falling back to first + last name."""
-    name = data.get("businessName") or data.get("fullName")
+    """
+    Return a raw profile's display name. v1 nests it under details (name, or
+    firstName + lastName); newer versions expose businessName / fullName at the top level.
+    """
+    details = data.get("details") if isinstance(data.get("details"), dict) else {}
+    name = (
+        data.get("businessName")
+        or data.get("fullName")
+        or details.get("name")
+        or details.get("fullName")
+    )
     if name:
         return str(name)
-    parts = [data.get("firstName"), data.get("lastName")]
+    parts = [
+        data.get("firstName") or details.get("firstName"),
+        data.get("lastName") or details.get("lastName"),
+    ]
     return " ".join(str(p) for p in parts if p)

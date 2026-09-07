@@ -8,6 +8,8 @@ from wise_mcp.api.wise_client_helper import init_wise_client
 
 PERSONAL = {"id": 100, "type": "PERSONAL", "firstName": "Ada", "lastName": "Lovelace", "fullName": "Ada Lovelace"}
 BUSINESS = {"id": 200, "type": "BUSINESS", "businessName": "Acme LLC", "fullName": "Ada Lovelace"}
+V1_PERSONAL = {"id": 300, "type": "personal", "details": {"firstName": "Ada", "lastName": "Lovelace"}}
+V1_BUSINESS = {"id": 400, "type": "business", "details": {"name": "Acme LLC", "companyType": "LIMITED_LIABILITY_COMPANY"}}
 
 
 @pytest.fixture
@@ -74,3 +76,10 @@ def test_summary_falls_back_to_first_and_last_name():
 
     assert summary.name == "Ada Lovelace"
     assert summary.type == "PERSONAL"
+
+
+def test_from_api_reads_v1_nested_details():
+    personal = WiseProfileSummary.from_api(V1_PERSONAL)
+    business = WiseProfileSummary.from_api(V1_BUSINESS)
+    assert (personal.type, personal.name) == ("PERSONAL", "Ada Lovelace")
+    assert (business.type, business.name) == ("BUSINESS", "Acme LLC")
