@@ -159,6 +159,42 @@ class WiseApiClient:
 
         return result
 
+    def get_balance_statement(
+        self,
+        profile_id: str,
+        balance_id: str,
+        currency: str,
+        interval_start: str,
+        interval_end: str,
+        statement_type: str = "COMPACT",
+    ) -> Dict[str, Any]:
+        """
+        Get the statement of a balance for a time window.
+
+        Args:
+            profile_id: The ID of the profile that holds the balance.
+            balance_id: The ID of the balance, from list_balances.
+            currency: Currency code of the balance.
+            interval_start: Window start, formatted as "YYYY-MM-DDTHH:MM:SS.000Z".
+            interval_end: Window end, formatted the same way.
+            statement_type: "COMPACT" (one line per transaction) or "FLAT" (fees as separate lines).
+
+        Returns:
+            Raw statement object from the Wise API, including its "transactions" list.
+
+        Raises:
+            Exception: If the API request fails.
+        """
+        return self._get(
+            f"/v1/profiles/{profile_id}/balance-statements/{balance_id}/statement.json",
+            params={
+                "currency": currency,
+                "intervalStart": interval_start,
+                "intervalEnd": interval_end,
+                "type": statement_type,
+            },
+        )
+
     def create_quote(
         self, 
         profile_id: str, 

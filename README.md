@@ -9,6 +9,7 @@ A MCP (Machine Communication Protocol) server that serves as a gateway for the W
 - Look up the status of a transfer
 - Preview the rate and fee of a payment with a quote
 - Send money step by step (quote, transfer, fund) with a review point before paying
+- Read balance statements to reconcile incoming and outgoing payments
 - Automatically handles authentication and profile selection
 - Uses the Wise Sandbox API for development and testing
 - Available as a Docker image for easy integration
@@ -193,6 +194,22 @@ after `send_money`.
 **Parameters**:
 - `transfer_id`: The ID of the transfer
 
+### `list_balance_transactions`
+
+Returns the transactions of a balance in a time window, newest first, for
+reconciling incoming payments (`CREDIT`) and outgoing transfers (`DEBIT`).
+Wise may require Strong Customer Authentication for statements on some
+accounts.
+
+**Parameters**:
+- `currency`: Currency code of the balance to read (e.g., 'EUR')
+- `profile_type`: The type of profile that holds the balance. One of [personal, business]. Default: "personal"
+- `days`: Number of days to look back when `interval_start` is not given. Default: 30
+- `interval_start`: Optional. Start of the window as an ISO 8601 timestamp
+- `interval_end`: Optional. End of the window as an ISO 8601 timestamp. Default: now
+- `transaction_type`: Optional. Only return `CREDIT` or `DEBIT` transactions
+- `sender_name`: Optional. Only return transactions whose sender name contains this text
+
 ## Configuration
 
 Configuration is done via environment variables, which can be set in the `.env` file:
@@ -219,6 +236,7 @@ wise-mcp/
         ├── resources/  # MCP resources
         │   ├── balances.py    # Balances resource
         │   ├── recipients.py  # Recipients resource
+        │   ├── statements.py  # Balance statements resource
         │   └── transfers.py   # Transfers resource
         └── app.py      # MCP application setup
 ```
