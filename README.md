@@ -253,6 +253,15 @@ wise-mcp/
         └── app.py      # MCP application setup
 ```
 
+### Running the tests
+
+The tests mock the HTTP layer, so they need neither a token nor network access:
+
+```bash
+uv pip install -e ".[dev]"
+python -m pytest
+```
+
 ### Adding New Features
 
 To add new features:
@@ -260,6 +269,7 @@ To add new features:
 1. Add new API client methods in `src/wise_mcp/api/wise_client.py`
 2. Create new resources in `src/wise_mcp/resources/`
 3. Import and register the new resources in `src/wise_mcp/app.py`
+4. Document the tool in this README and add a test under `tests/`
 
 ## Contributing
 
