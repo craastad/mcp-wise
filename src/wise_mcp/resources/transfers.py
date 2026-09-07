@@ -3,6 +3,7 @@ Wise API transfer resources for the FastMCP server.
 """
 
 import uuid
+from pathlib import Path
 from typing import Optional
 
 from wise_mcp.app import mcp
@@ -149,3 +150,30 @@ def get_transfer(transfer_id: str) -> WiseTransfer:
     """
 
     return WiseApiClient().get_transfer(transfer_id)
+
+
+@mcp.tool()
+def download_transfer_receipt(transfer_id: str, output_path: str) -> str:
+    """
+    Saves the PDF receipt of a completed transfer to a file on the machine running this server,
+    for use as proof of payment. The receipt is only available once the transfer has reached
+    status 'outgoing_payment_sent'; check with get_transfer first.
+
+    Args:
+        transfer_id: The ID of the transfer
+        output_path: File path to write the PDF to; parent directories are created as needed
+
+    Returns:
+        String message with the path written and the file size
+
+    Raises:
+        Exception: If the API request fails or the receipt is not available yet
+    """
+
+    pdf = WiseApiClient().download_transfer_receipt(transfer_id)
+
+    path = Path(output_path).expanduser()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(pdf)
+
+    return f"Receipt for transfer {transfer_id} written to {path} ({len(pdf)} bytes)"

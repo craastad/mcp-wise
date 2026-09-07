@@ -10,6 +10,7 @@ A MCP (Machine Communication Protocol) server that serves as a gateway for the W
 - Preview the rate and fee of a payment with a quote
 - Send money step by step (quote, transfer, fund) with a review point before paying
 - Read balance statements to reconcile incoming and outgoing payments
+- Download the PDF receipt of a completed transfer
 - Automatically handles authentication and profile selection
 - Uses the Wise Sandbox API for development and testing
 - Available as a Docker image for easy integration
@@ -209,6 +210,17 @@ accounts.
 - `interval_end`: Optional. End of the window as an ISO 8601 timestamp. Default: now
 - `transaction_type`: Optional. Only return `CREDIT` or `DEBIT` transactions
 - `sender_name`: Optional. Only return transactions whose sender name contains this text
+
+### `download_transfer_receipt`
+
+Saves the PDF receipt of a completed transfer to a file on the machine
+running the server, for use as proof of payment. The receipt is only
+available once the transfer has reached status `outgoing_payment_sent`.
+When the server runs in Docker, the path is inside the container.
+
+**Parameters**:
+- `transfer_id`: The ID of the transfer
+- `output_path`: File path to write the PDF to; parent directories are created as needed
 
 ## Configuration
 

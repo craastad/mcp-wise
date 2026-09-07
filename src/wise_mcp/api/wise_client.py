@@ -356,6 +356,24 @@ class WiseApiClient:
         """
         return WiseTransfer.from_api(self._get(f"/v1/transfers/{transfer_id}"))
 
+    def download_transfer_receipt(self, transfer_id: str) -> bytes:
+        """
+        Download the PDF receipt of a transfer.
+
+        The receipt only exists once the money has left, i.e. from status
+        "outgoing_payment_sent" onwards; before that the API returns an error.
+
+        Args:
+            transfer_id: The ID of the transfer.
+
+        Returns:
+            The PDF file contents.
+
+        Raises:
+            Exception: If the API request fails or the receipt is not available yet.
+        """
+        return self._request("GET", f"/v1/transfers/{transfer_id}/receipt.pdf").content
+
     def get_account_requirements(self,
                                  quote_id: str,
                                  account_details: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:

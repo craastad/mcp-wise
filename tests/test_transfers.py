@@ -31,3 +31,13 @@ def test_get_transfer_maps_fields(client, mock_request):
     assert transfer.has_active_issues is False
     args, _ = mock_request.call_args
     assert args == ("GET", "https://api.transferwise.com/v1/transfers/123456")
+
+
+def test_download_transfer_receipt_returns_pdf_bytes(client, mock_request):
+    mock_request.return_value = make_response(200, content=b"%PDF-1.4 fake")
+
+    pdf = client.download_transfer_receipt("123456")
+
+    assert pdf.startswith(b"%PDF")
+    args, _ = mock_request.call_args
+    assert args == ("GET", "https://api.transferwise.com/v1/transfers/123456/receipt.pdf")
