@@ -7,7 +7,7 @@ from typing import Dict, Any, Optional
 
 from wise_mcp.app import mcp
 from wise_mcp.api.wise_client_helper import init_wise_client
-from wise_mcp.api.types import WiseFundResponse, WiseFundWithScaResponse
+from wise_mcp.resources.transfers import describe_fund_result
 
 
 @mcp.tool()
@@ -74,16 +74,4 @@ def send_money(
         type="BALANCE"
     )
 
-    fund_response = fund_result.fund_response
-    sca_response = fund_result.sca_response
-
-    if sca_response:
-        # If SCA is required, return the token for further processing
-        # ott_token_status = ctx.wise_api_client.get_ott_token_status(ott=sca_response.one_time_token)
-        return f"Transfer {transfer_id} requires SCA. Please enter the PIN for the following OTT {sca_response.one_time_token}"
-
-    if fund_response.status == "COMPLETED":
-        return f"Transfer {transfer_id} successfully sent"
-    else:
-        error_message = fund_response.error_code if fund_response else "unknown error"
-        return f"Transfer {transfer_id} failed due to {error_message}"
+    return describe_fund_result(transfer_id, fund_result)

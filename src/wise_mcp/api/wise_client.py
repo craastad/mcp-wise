@@ -7,7 +7,14 @@ import requests
 from typing import Dict, List, Optional, Any
 
 from dotenv import load_dotenv
-from .types import WiseRecipient, WiseFundResponse, WiseScaResponse, WiseFundWithScaResponse
+from .types import (
+    WiseBalance,
+    WiseRecipient,
+    WiseFundResponse,
+    WiseScaResponse,
+    WiseFundWithScaResponse,
+    WiseTransfer,
+)
 
 # Load environment variables from .env file
 load_dotenv()
@@ -122,6 +129,72 @@ class WiseApiClient:
             
         return recipients
     
+    def list_balances(self, profile_id: str, currency: Optional[str] = None) -> List[WiseBalance]:
+        """
+        List the standard (non-savings) balances of a profile.
+
+        Args:
+            profile_id: The ID of the profile whose balances to list.
+            currency: Optional. Only return the balance for this currency code.
+
+        Returns:
+            List of WiseBalance objects.
+
+        Raises:
+            Exception: If the API request fails.
+        """
+        balances = self._get(f"/v4/profiles/{profile_id}/balances", params={"types": "STANDARD"})
+
+        result = []
+        for balance in balances:
+            if currency and balance.get("currency") != currency.upper():
+                continue
+            result.append(WiseBalance(
+                id=str(balance.get("id", "")),
+                currency=balance.get("currency", ""),
+                amount=float(balance.get("amount", {}).get("value", 0)),
+                reserved_amount=float(balance.get("reservedAmount", {}).get("value", 0)),
+                name=balance.get("name"),
+            ))
+
+        return result
+
+    def get_balance_statement(
+        self,
+        profile_id: str,
+        balance_id: str,
+        currency: str,
+        interval_start: str,
+        interval_end: str,
+        statement_type: str = "COMPACT",
+    ) -> Dict[str, Any]:
+        """
+        Get the statement of a balance for a time window.
+
+        Args:
+            profile_id: The ID of the profile that holds the balance.
+            balance_id: The ID of the balance, from list_balances.
+            currency: Currency code of the balance.
+            interval_start: Window start, formatted as "YYYY-MM-DDTHH:MM:SS.000Z".
+            interval_end: Window end, formatted the same way.
+            statement_type: "COMPACT" (one line per transaction) or "FLAT" (fees as separate lines).
+
+        Returns:
+            Raw statement object from the Wise API, including its "transactions" list.
+
+        Raises:
+            Exception: If the API request fails.
+        """
+        return self._get(
+            f"/v1/profiles/{profile_id}/balance-statements/{balance_id}/statement.json",
+            params={
+                "currency": currency,
+                "intervalStart": interval_start,
+                "intervalEnd": interval_end,
+                "type": statement_type,
+            },
+        )
+
     def create_quote(
         self, 
         profile_id: str, 
@@ -268,6 +341,39 @@ class WiseApiClient:
         return result
 
             
+    def get_transfer(self, transfer_id: str) -> WiseTransfer:
+        """
+        Get a transfer by ID.
+
+        Args:
+            transfer_id: The ID of the transfer to fetch.
+
+        Returns:
+            WiseTransfer with the current status and amounts.
+
+        Raises:
+            Exception: If the API request fails.
+        """
+        return WiseTransfer.from_api(self._get(f"/v1/transfers/{transfer_id}"))
+
+    def download_transfer_receipt(self, transfer_id: str) -> bytes:
+        """
+        Download the PDF receipt of a transfer.
+
+        The receipt only exists once the money has left, i.e. from status
+        "outgoing_payment_sent" onwards; before that the API returns an error.
+
+        Args:
+            transfer_id: The ID of the transfer.
+
+        Returns:
+            The PDF file contents.
+
+        Raises:
+            Exception: If the API request fails or the receipt is not available yet.
+        """
+        return self._request("GET", f"/v1/transfers/{transfer_id}/receipt.pdf").content
+
     def get_account_requirements(self,
                                  quote_id: str,
                                  account_details: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -377,6 +483,45 @@ class WiseApiClient:
             
         return response.json()
     
+    def _request(
+        self,
+        method: str,
+        path: str,
+        params: Optional[Dict[str, Any]] = None,
+        json: Optional[Dict[str, Any]] = None,
+    ) -> requests.Response:
+        """
+        Send a request to the Wise API and raise on any 4xx/5xx response.
+
+        Args:
+            method: HTTP method, e.g. "GET" or "POST".
+            path: Path relative to the API base URL, e.g. "/v1/transfers/123".
+            params: Optional query parameters.
+            json: Optional JSON request body.
+
+        Returns:
+            The successful response object.
+
+        Raises:
+            Exception: If the API request fails.
+        """
+        response = requests.request(
+            method, f"{self.base_url}{path}", headers=self.headers, params=params, json=json
+        )
+
+        if response.status_code >= 400:
+            self._handle_error(response)
+
+        return response
+
+    def _get(self, path: str, params: Optional[Dict[str, Any]] = None) -> Any:
+        """GET a JSON resource from the Wise API."""
+        return self._request("GET", path, params=params).json()
+
+    def _post(self, path: str, json: Optional[Dict[str, Any]] = None) -> Any:
+        """POST a JSON body to the Wise API and return the JSON response."""
+        return self._request("POST", path, json=json).json()
+
     def _handle_error(self, response: requests.Response) -> None:
         """
         Handle API errors by raising an exception with details.

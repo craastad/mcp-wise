@@ -5,6 +5,12 @@ A MCP (Machine Communication Protocol) server that serves as a gateway for the W
 ## Features
 
 - List all recipients from your Wise account via a simple MCP resource
+- Check the balances of a profile
+- Look up the status of a transfer
+- Preview the rate and fee of a payment with a quote
+- Send money step by step (quote, transfer, fund) with a review point before paying
+- Read balance statements to reconcile incoming and outgoing payments
+- Download the PDF receipt of a completed transfer
 - Automatically handles authentication and profile selection
 - Uses the Wise Sandbox API for development and testing
 - Available as a Docker image for easy integration
@@ -101,6 +107,15 @@ Returns a list of all recipients from your Wise account.
 - `profile_type`: The type of profile to list recipients for. One of [personal, business]. Default: "personal"
 - `currency`: Optional. Filter recipients by currency code (e.g., 'EUR', 'USD')
 
+### `get_balances`
+
+Returns the balances held by a profile, one entry per currency, with the
+available and reserved amounts.
+
+**Parameters**:
+- `profile_type`: The type of profile to list balances for. One of [personal, business]. Default: "personal"
+- `currency`: Optional. Only return the balance for this currency code (e.g., 'EUR')
+
 ### `get_recipient_requirements`
 
 Fetches recipient requirements for creating a new recipient. If account details are provided, validates the account details against the requirements.
@@ -136,6 +151,77 @@ Sends money to a recipient using the Wise API.
 - `payment_reference`: Optional. Reference message for the transfer (defaults to "money")
 - `source_of_funds`: Optional. Source of the funds (e.g., "salary", "savings")
 
+### `create_quote`
+
+Creates a quote and returns the rate, fee, target amount and expiry for
+paying it from the balance. No money moves, so this previews a payment
+before `send_money`, or starts the step-by-step
+`create_quote` → `create_transfer` → `fund_transfer` flow.
+
+**Parameters**:
+- `source_currency`: Source currency code (e.g., 'EUR')
+- `target_currency`: Target currency code; same as source for a same-currency transfer
+- `source_amount`: Amount in source currency to send
+- `recipient_id`: Optional. The ID of the recipient the quote is for (gives the exact fee)
+- `profile_type`: The type of profile to use. One of [personal, business]. Default: "personal"
+
+### `create_transfer`
+
+Creates a transfer from a quote without paying it, so the amounts and
+reference can be reviewed before `fund_transfer` moves the money. Use
+`send_money` when no review step is needed.
+
+**Parameters**:
+- `recipient_id`: The ID of the recipient to send money to
+- `quote_id`: The ID of a quote from `create_quote` for this recipient and amount
+- `payment_reference`: Reference message shown to the recipient
+- `source_of_funds`: Optional. Source of the funds (e.g., "salary", "savings")
+
+### `fund_transfer`
+
+Pays a transfer created with `create_transfer` from the profile's balance.
+This moves money and may trigger an SCA challenge, in which case the
+returned message contains the one-time token to approve.
+
+**Parameters**:
+- `transfer_id`: The ID of the transfer to fund
+- `profile_type`: The type of profile that owns the transfer. One of [personal, business]. Default: "personal"
+
+### `get_transfer`
+
+Returns the current status and amounts of a transfer, for following a payment
+after `send_money`.
+
+**Parameters**:
+- `transfer_id`: The ID of the transfer
+
+### `list_balance_transactions`
+
+Returns the transactions of a balance in a time window, newest first, for
+reconciling incoming payments (`CREDIT`) and outgoing transfers (`DEBIT`).
+Wise may require Strong Customer Authentication for statements on some
+accounts.
+
+**Parameters**:
+- `currency`: Currency code of the balance to read (e.g., 'EUR')
+- `profile_type`: The type of profile that holds the balance. One of [personal, business]. Default: "personal"
+- `days`: Number of days to look back when `interval_start` is not given. Default: 30
+- `interval_start`: Optional. Start of the window as an ISO 8601 timestamp
+- `interval_end`: Optional. End of the window as an ISO 8601 timestamp. Default: now
+- `transaction_type`: Optional. Only return `CREDIT` or `DEBIT` transactions
+- `sender_name`: Optional. Only return transactions whose sender name contains this text
+
+### `download_transfer_receipt`
+
+Saves the PDF receipt of a completed transfer to a file on the machine
+running the server, for use as proof of payment. The receipt is only
+available once the transfer has reached status `outgoing_payment_sent`.
+When the server runs in Docker, the path is inside the container.
+
+**Parameters**:
+- `transfer_id`: The ID of the transfer
+- `output_path`: File path to write the PDF to; parent directories are created as needed
+
 ## Configuration
 
 Configuration is done via environment variables, which can be set in the `.env` file:
@@ -160,8 +246,20 @@ wise-mcp/
         ├── api/        # API clients
         │   └── wise_client.py # Wise API client
         ├── resources/  # MCP resources
-        │   └── recipients.py  # Recipients resource
+        │   ├── balances.py    # Balances resource
+        │   ├── recipients.py  # Recipients resource
+        │   ├── statements.py  # Balance statements resource
+        │   └── transfers.py   # Transfers resource
         └── app.py      # MCP application setup
+```
+
+### Running the tests
+
+The tests mock the HTTP layer, so they need neither a token nor network access:
+
+```bash
+uv pip install -e ".[dev]"
+python -m pytest
 ```
 
 ### Adding New Features
@@ -171,6 +269,7 @@ To add new features:
 1. Add new API client methods in `src/wise_mcp/api/wise_client.py`
 2. Create new resources in `src/wise_mcp/resources/`
 3. Import and register the new resources in `src/wise_mcp/app.py`
+4. Document the tool in this README and add a test under `tests/`
 
 ## Contributing
 
