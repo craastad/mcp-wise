@@ -377,6 +377,45 @@ class WiseApiClient:
             
         return response.json()
     
+    def _request(
+        self,
+        method: str,
+        path: str,
+        params: Optional[Dict[str, Any]] = None,
+        json: Optional[Dict[str, Any]] = None,
+    ) -> requests.Response:
+        """
+        Send a request to the Wise API and raise on any 4xx/5xx response.
+
+        Args:
+            method: HTTP method, e.g. "GET" or "POST".
+            path: Path relative to the API base URL, e.g. "/v1/transfers/123".
+            params: Optional query parameters.
+            json: Optional JSON request body.
+
+        Returns:
+            The successful response object.
+
+        Raises:
+            Exception: If the API request fails.
+        """
+        response = requests.request(
+            method, f"{self.base_url}{path}", headers=self.headers, params=params, json=json
+        )
+
+        if response.status_code >= 400:
+            self._handle_error(response)
+
+        return response
+
+    def _get(self, path: str, params: Optional[Dict[str, Any]] = None) -> Any:
+        """GET a JSON resource from the Wise API."""
+        return self._request("GET", path, params=params).json()
+
+    def _post(self, path: str, json: Optional[Dict[str, Any]] = None) -> Any:
+        """POST a JSON body to the Wise API and return the JSON response."""
+        return self._request("POST", path, json=json).json()
+
     def _handle_error(self, response: requests.Response) -> None:
         """
         Handle API errors by raising an exception with details.
