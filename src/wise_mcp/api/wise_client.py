@@ -8,6 +8,7 @@ import requests
 from typing import Dict, List, Optional, Any
 
 from dotenv import load_dotenv
+from .sca import private_key_passphrase_from_env, private_key_path_from_env, sign_one_time_token
 from .types import (
     WiseBalance,
     WiseRecipient,
@@ -30,6 +31,20 @@ STATEMENT_FORMATS = {
     "json": "application/json",
 }
 STATEMENT_TYPES = {"COMPACT", "FLAT"}
+
+
+class WiseSCARequiredError(Exception):
+    """Raised when a request needs Strong Customer Authentication and no signing key is configured."""
+
+    def __init__(self, one_time_token: str):
+        self.one_time_token = one_time_token
+        super().__init__(
+            "This request needs Strong Customer Authentication (SCA), which is done by signing a "
+            "one-time token with an RSA key. Generate a key pair (openssl genrsa -out private.pem 2048; "
+            "openssl rsa -pubout -in private.pem -out public.pem), upload public.pem under "
+            "Wise -> Your account -> API tokens -> Manage public keys, and set WISE_PRIVATE_KEY_PATH "
+            "to private.pem (and WISE_PRIVATE_KEY_PASSPHRASE if the key is encrypted)."
+        )
 
 class WiseApiClient:
     """Client for interacting with the Wise API."""
@@ -572,14 +587,46 @@ class WiseApiClient:
         Raises:
             Exception: If the API request fails.
         """
+        headers = headers or self.headers
         response = requests.request(
-            method, f"{self.base_url}{path}", headers=headers or self.headers, params=params, json=json
+            method, f"{self.base_url}{path}", headers=headers, params=params, json=json
         )
+
+        one_time_token = self._sca_token(response)
+        if one_time_token:
+            response = requests.request(
+                method,
+                f"{self.base_url}{path}",
+                headers={**headers, **self._sca_headers(one_time_token)},
+                params=params,
+                json=json,
+            )
 
         if response.status_code >= 400:
             self._handle_error(response)
 
         return response
+
+    @staticmethod
+    def _sca_token(response: requests.Response) -> Optional[str]:
+        """Return the one-time token of a 403 SCA challenge, or None for any other response."""
+        if response.status_code != 403:
+            return None
+        return response.headers.get("x-2fa-approval") or None
+
+    @staticmethod
+    def _sca_headers(one_time_token: str) -> Dict[str, str]:
+        """
+        Build the headers that answer an SCA challenge by signing the token with the configured key.
+
+        Raises:
+            WiseSCARequiredError: If WISE_PRIVATE_KEY_PATH is not set.
+        """
+        key_path = private_key_path_from_env()
+        if not key_path:
+            raise WiseSCARequiredError(one_time_token)
+        signature = sign_one_time_token(one_time_token, key_path, private_key_passphrase_from_env())
+        return {"x-2fa-approval": one_time_token, "X-Signature": signature}
 
     def _get(self, path: str, params: Optional[Dict[str, Any]] = None) -> Any:
         """GET a JSON resource from the Wise API."""
