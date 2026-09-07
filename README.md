@@ -6,6 +6,7 @@ A MCP (Machine Communication Protocol) server that serves as a gateway for the W
 
 - List all recipients from your Wise account via a simple MCP resource
 - Check the balances of a profile
+- Look up the status of a transfer
 - Automatically handles authentication and profile selection
 - Uses the Wise Sandbox API for development and testing
 - Available as a Docker image for easy integration
@@ -146,6 +147,14 @@ Sends money to a recipient using the Wise API.
 - `payment_reference`: Optional. Reference message for the transfer (defaults to "money")
 - `source_of_funds`: Optional. Source of the funds (e.g., "salary", "savings")
 
+### `get_transfer`
+
+Returns the current status and amounts of a transfer, for following a payment
+after `send_money`.
+
+**Parameters**:
+- `transfer_id`: The ID of the transfer
+
 ## Configuration
 
 Configuration is done via environment variables, which can be set in the `.env` file:
@@ -171,7 +180,8 @@ wise-mcp/
         │   └── wise_client.py # Wise API client
         ├── resources/  # MCP resources
         │   ├── balances.py    # Balances resource
-        │   └── recipients.py  # Recipients resource
+        │   ├── recipients.py  # Recipients resource
+        │   └── transfers.py   # Transfers resource
         └── app.py      # MCP application setup
 ```
 

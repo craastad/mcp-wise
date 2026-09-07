@@ -7,7 +7,14 @@ import requests
 from typing import Dict, List, Optional, Any
 
 from dotenv import load_dotenv
-from .types import WiseBalance, WiseRecipient, WiseFundResponse, WiseScaResponse, WiseFundWithScaResponse
+from .types import (
+    WiseBalance,
+    WiseRecipient,
+    WiseFundResponse,
+    WiseScaResponse,
+    WiseFundWithScaResponse,
+    WiseTransfer,
+)
 
 # Load environment variables from .env file
 load_dotenv()
@@ -298,6 +305,21 @@ class WiseApiClient:
         return result
 
             
+    def get_transfer(self, transfer_id: str) -> WiseTransfer:
+        """
+        Get a transfer by ID.
+
+        Args:
+            transfer_id: The ID of the transfer to fetch.
+
+        Returns:
+            WiseTransfer with the current status and amounts.
+
+        Raises:
+            Exception: If the API request fails.
+        """
+        return WiseTransfer.from_api(self._get(f"/v1/transfers/{transfer_id}"))
+
     def get_account_requirements(self,
                                  quote_id: str,
                                  account_details: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:

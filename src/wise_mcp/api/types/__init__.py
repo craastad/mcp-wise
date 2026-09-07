@@ -8,5 +8,6 @@ from .recipient import WiseRecipient
 from .transfer import WiseFundResponse
 from .transfer import WiseScaResponse
 from .transfer import WiseFundWithScaResponse
+from .transfer import WiseTransfer
 
-__all__ = ["WiseBalance", "WiseProfile", "WiseRecipient", "WiseFundResponse", "WiseScaResponse", "WiseFundWithScaResponse"]
+__all__ = ["WiseBalance", "WiseProfile", "WiseRecipient", "WiseFundResponse", "WiseScaResponse", "WiseFundWithScaResponse", "WiseTransfer"]
