@@ -47,7 +47,7 @@ def test_get_balance_statement_passes_window_and_type(client, mock_request):
 
     assert len(statement["transactions"]) == 2
     args, kwargs = mock_request.call_args
-    assert args[1].endswith("/v1/profiles/42/balance-statements/7/statement.json")
+    assert args[1].endswith("/2026Q3/profiles/42/balance-statements/7/statement.json")
     assert kwargs["params"] == {
         "currency": "EUR",
         "intervalStart": "2026-01-01T00:00:00.000Z",

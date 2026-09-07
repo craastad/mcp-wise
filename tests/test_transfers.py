@@ -30,7 +30,13 @@ def test_get_transfer_maps_fields(client, mock_request):
     assert transfer.recipient_id == "987"
     assert transfer.has_active_issues is False
     args, _ = mock_request.call_args
-    assert args == ("GET", "https://api.transferwise.com/v1/transfers/123456")
+    assert args == ("GET", "https://api.wise.com/2026Q3/transfers/123456")
+
+
+def test_get_transfer_reads_top_level_reference(client, mock_request):
+    mock_request.return_value = make_response(200, {**TRANSFER, "details": {}, "reference": "Invoice 43"})
+
+    assert client.get_transfer("123456").reference == "Invoice 43"
 
 
 def test_download_transfer_receipt_returns_pdf_bytes(client, mock_request):
@@ -40,4 +46,4 @@ def test_download_transfer_receipt_returns_pdf_bytes(client, mock_request):
 
     assert pdf.startswith(b"%PDF")
     args, _ = mock_request.call_args
-    assert args == ("GET", "https://api.transferwise.com/v1/transfers/123456/receipt.pdf")
+    assert args == ("GET", "https://api.wise.com/2026Q3/transfers/123456/receipt.pdf")

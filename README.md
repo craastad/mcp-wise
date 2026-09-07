@@ -256,7 +256,7 @@ Some accounts need Strong Customer Authentication for statements (see
 Configuration is done via environment variables, which can be set in the `.env` file:
 
 - `WISE_API_TOKEN`: Your Wise API token (required)
-- `WISE_IS_SANDBOX`: Set to true to use the Wise Sandbox API (default: false)
+- `WISE_IS_SANDBOX`: Set to true to use the Wise Sandbox API at `api.wise-sandbox.com` instead of `api.wise.com` (default: false)
 - `WISE_PROFILE_ID`: Default profile id for every tool; run `list_profiles` to find it (optional)
 - `WISE_PRIVATE_KEY_PATH`: Path to the RSA private key used to answer Strong Customer Authentication challenges (optional)
 - `WISE_PRIVATE_KEY_PASSPHRASE`: Passphrase of that key, if it is encrypted (optional)
@@ -291,7 +291,21 @@ registered in the US, Canada, Australia, New Zealand, Singapore or
 Malaysia usually do not need this; if a statement call fails with an
 SCA error, set the key up as above.
 
+## Releases
+
+Releases are tagged `vX.Y.Z`, matching the `version` in `pyproject.toml`;
+[CHANGELOG.md](CHANGELOG.md) lists what each one changed.
+
 ## Development
+
+### Wise API version
+
+Wise versions its API by calendar quarter. Every request path is
+prefixed with `WISE_API_VERSION` from `src/wise_mcp/api/wise_client.py`
+(currently `2026Q3`), so moving to a newer quarter is a one-line change
+there. The pdf, csv and xlsx balance statements are the exception: the
+versioned API only serves `statement.json`, so those files are still
+fetched from the legacy `/v1` path.
 
 ### Project Structure
 

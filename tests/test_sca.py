@@ -78,7 +78,7 @@ def test_challenge_without_key_raises_setup_instructions(client, mock_request, m
     mock_request.return_value = make_response(403, headers=CHALLENGE_HEADERS)
 
     with pytest.raises(WiseSCARequiredError, match="WISE_PRIVATE_KEY_PATH") as excinfo:
-        client._get("/v1/example")
+        client._get("/2026Q3/example")
 
     assert excinfo.value.one_time_token == "ott-123"
     assert mock_request.call_count == 1
@@ -89,4 +89,4 @@ def test_plain_403_is_not_treated_as_challenge(client, mock_request, monkeypatch
     mock_request.return_value = make_response(403, {"errors": [{"code": "FORBIDDEN", "message": "no"}]})
 
     with pytest.raises(Exception, match="FORBIDDEN"):
-        client._get("/v1/example")
+        client._get("/2026Q3/example")
