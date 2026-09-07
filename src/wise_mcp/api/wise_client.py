@@ -57,7 +57,7 @@ class WiseApiClient:
             api_token: The API token to use for authentication.
         """
 
-        is_sandbox = os.getenv("WISE_IS_SANDBOX", "true").lower() == "true"
+        is_sandbox = os.getenv("WISE_IS_SANDBOX", "false").lower() == "true"
         self.api_token = os.getenv("WISE_API_TOKEN", "")
 
         if not self.api_token:

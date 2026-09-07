@@ -13,7 +13,7 @@ RUN pip install --no-cache-dir .
 # Environment variables with defaults
 # API token should be provided at runtime
 # docker run --env WISE_API_TOKEN=your_token your_image
-ENV WISE_IS_SANDBOX="true"
+ENV WISE_IS_SANDBOX="false"
 ENV MODE="stdio"
 
 # Set entrypoint
